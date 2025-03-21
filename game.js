@@ -1,106 +1,101 @@
-
 let scene, camera, renderer, cube;
-const tileSize = 1;
-const gridSize = 20;
-let map = [];
-let startX = 0, startZ = 0;
-let endX = 0, endZ = 0;
-let cubeX = 0, cubeZ = 0;
+let gridSize = 12;
+let grid = [];
+let cubePos = { x: 1, y: 1 };
+let endPos = { x: gridSize - 2, y: gridSize - 2 };
 
 function init() {
-    scene = new THREE.Scene();
-    camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-    renderer = new THREE.WebGLRenderer();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    document.getElementById('gameContainer').innerHTML = '';
-    document.getElementById('gameContainer').appendChild(renderer.domElement);
+  scene = new THREE.Scene();
+  const aspect = window.innerWidth / window.innerHeight;
+  camera = new THREE.PerspectiveCamera(50, aspect, 0.1, 1000);
+  let distance = gridSize * 1.2;
+  camera.position.set(distance, distance, distance);
+  camera.lookAt(gridSize / 2, 0, gridSize / 2);
 
-    generateSolvableMap();
-    renderMap();
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+  document.getElementById("gameContainer").appendChild(renderer.domElement);
+  onWindowResize();
+  window.addEventListener("resize", onWindowResize);
 
-    const geometry = new THREE.BoxGeometry(tileSize, tileSize, tileSize);
-    const material = new THREE.MeshBasicMaterial({ color: 0xff6600 });
-    cube = new THREE.Mesh(geometry, material);
-    scene.add(cube);
-
-    cube.position.set(startX, 0.5, startZ);
-    cubeX = startX;
-    cubeZ = startZ;
-
-    camera.position.set(gridSize, gridSize * 1.5, gridSize * 1.2);
-    camera.lookAt(gridSize / 2, 0, gridSize / 2);
-
-    animate();
+  generateGrid();
+  addLights();
+  animate();
 }
 
-function generateSolvableMap() {
-    map = Array.from({ length: gridSize }, () => Array(gridSize).fill(0));
-    let x = Math.floor(Math.random() * gridSize);
-    let z = Math.floor(Math.random() * gridSize);
-    startX = x;
-    startZ = z;
-    map[z][x] = 1;
+function generateGrid() {
+  const geometry = new THREE.BoxGeometry(1, 0.2, 1);
+  const material = new THREE.MeshStandardMaterial({ color: 0x555555 });
+  const endMaterial = new THREE.MeshStandardMaterial({ color: 0x00ff00 });
+  const cubeMaterial = new THREE.MeshStandardMaterial({ color: 0xff0000 });
 
-    const steps = 80;
-    const directions = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-    for (let i = 0; i < steps; i++) {
-        const [dx, dz] = directions[Math.floor(Math.random() * directions.length)];
-        const nx = x + dx;
-        const nz = z + dz;
-        if (nx >= 0 && nx < gridSize && nz >= 0 && nz < gridSize && map[nz][nx] === 0) {
-            x = nx;
-            z = nz;
-            map[z][x] = 1;
-        }
+  for (let x = 0; x < gridSize; x++) {
+    grid[x] = [];
+    for (let y = 0; y < gridSize; y++) {
+      let tileMaterial = (x === endPos.x && y === endPos.y) ? endMaterial : material;
+      if (Math.random() < 0.8 || (x === 1 && y === 1) || (x === endPos.x && y === endPos.y)) {
+        let tile = new THREE.Mesh(geometry, tileMaterial);
+        tile.position.set(x, 0, y);
+        scene.add(tile);
+        grid[x][y] = true;
+      } else {
+        grid[x][y] = false;
+      }
     }
-    endX = x;
-    endZ = z;
-    map[endZ][endX] = 2;
+  }
+
+  const cubeGeometry = new THREE.BoxGeometry(0.8, 0.8, 0.8);
+  cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
+  cube.position.set(cubePos.x, 0.5, cubePos.y);
+  scene.add(cube);
 }
 
-function renderMap() {
-    for (let z = 0; z < gridSize; z++) {
-        for (let x = 0; x < gridSize; x++) {
-            if (map[z][x] > 0) {
-                const tileGeo = new THREE.BoxGeometry(tileSize, 0.1, tileSize);
-                const tileMat = new THREE.MeshBasicMaterial({ color: map[z][x] === 2 ? 0x00ff00 : 0x4444ff });
-                const tile = new THREE.Mesh(tileGeo, tileMat);
-                tile.position.set(x, 0, z);
-                scene.add(tile);
-            }
-        }
-    }
+function addLights() {
+  const light = new THREE.DirectionalLight(0xffffff, 1);
+  light.position.set(10, 20, 10);
+  scene.add(light);
+  scene.add(new THREE.AmbientLight(0x404040));
 }
 
-function move(direction) {
-    let dx = 0, dz = 0;
-    if (direction === 'up') dz = -1;
-    if (direction === 'down') dz = 1;
-    if (direction === 'left') dx = -1;
-    if (direction === 'right') dx = 1;
+function move(dir) {
+  let dx = 0, dy = 0;
+  if (dir === "up") dy = -1;
+  else if (dir === "down") dy = 1;
+  else if (dir === "left") dx = -1;
+  else if (dir === "right") dx = 1;
 
-    const newX = cubeX + dx;
-    const newZ = cubeZ + dz;
+  let newX = cubePos.x + dx;
+  let newY = cubePos.y + dy;
 
-    if (newX >= 0 && newX < gridSize && newZ >= 0 && newZ < gridSize && map[newZ][newX] > 0) {
-        cubeX = newX;
-        cubeZ = newZ;
-        cube.position.set(cubeX, 0.5, cubeZ);
+  if (grid[newX] && grid[newX][newY]) {
+    cubePos = { x: newX, y: newY };
+    cube.position.set(newX, 0.5, newY);
 
-        if (cubeX === endX && cubeZ === endZ) {
-            document.getElementById('statusText').innerText = "🎉 You reached the goal! Generating new level...";
-            setTimeout(() => {
-                while (scene.children.length > 0) { scene.remove(scene.children[0]); }
-                init();
-                document.getElementById('statusText').innerText = "";
-            }, 2000);
-        }
+    if (newX === endPos.x && newY === endPos.y) {
+      nextLevel();
     }
+  }
+}
+
+function nextLevel() {
+  gridSize += 2;
+  grid = [];
+  endPos = { x: gridSize - 2, y: gridSize - 2 };
+  cubePos = { x: 1, y: 1 };
+  scene.clear();
+  init();
+}
+
+function onWindowResize() {
+  const width = window.innerWidth;
+  const height = window.innerHeight;
+  camera.aspect = width / height;
+  camera.updateProjectionMatrix();
+  renderer.setSize(width, height * 0.6);
 }
 
 function animate() {
-    requestAnimationFrame(animate);
-    renderer.render(scene, camera);
+  requestAnimationFrame(animate);
+  renderer.render(scene, camera);
 }
 
-window.onload = init;
+init();
